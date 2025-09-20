@@ -14,34 +14,52 @@ const credentials = {
 const AfricasTalking = require('africastalking')(credentials); 
 const sms = AfricasTalking.SMS; 
 
+// Middleware to log all requests
+router.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log('Request Body:', req.body);
+    next();
+});
+
 // Send SMS route 
 router.post('/', async (req, res) => {
     try {
+        console.log('=== SMS Send Request ===');
+        console.log('Raw body:', req.body);
+        
         // Extract data from request body
         const { to, message, from } = req.body;
         
+        console.log(`To: ${to}, From: ${from}, Message: ${message}`);
+        
         // Validate required fields
         if (!to || !message) {
+            const error = 'Missing required fields: to and message are required';
+            console.error('Validation Error:', error);
             return res.status(400).json({
                 success: false,
-                error: 'Missing required fields: to and message are required'
+                error: error
             });
         }
         
         // Validate phone number format (Rwanda)
         const phoneRegex = /^\+250[0-9]{9}$/;
         if (!phoneRegex.test(to)) {
+            const error = 'Invalid phone number format. Use +250XXXXXXXXX';
+            console.error('Phone Validation Error:', error);
             return res.status(400).json({
                 success: false,
-                error: 'Invalid phone number format. Use +250XXXXXXXXX'
+                error: error
             });
         }
         
         // Validate message length
         if (message.length > 160) {
+            const error = 'Message too long. Maximum 160 characters allowed';
+            console.error('Message Length Error:', error);
             return res.status(400).json({
                 success: false,
-                error: 'Message too long. Maximum 160 characters allowed'
+                error: error
             });
         }
         
@@ -57,12 +75,12 @@ router.post('/', async (req, res) => {
             smsOptions.from = from;
         }
         
-        console.log('Sending SMS:', smsOptions);
+        console.log('SMS Options:', smsOptions);
         
         // Send SMS
         const response = await sms.send(smsOptions);
         
-        console.log('SMS Response:', response);
+        console.log('Africa\'s Talking Response:', JSON.stringify(response, null, 2));
         
         // Return success response
         res.status(200).json({
@@ -72,34 +90,35 @@ router.post('/', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('SMS Error:', error);
+        console.error('SMS Error Details:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
         
         // Return error response
         res.status(500).json({
             success: false,
             error: error.message || 'Failed to send SMS',
-            details: error.toString()
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 });
 
-// Health check route
-router.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'healthy',
-        service: 'Africa\'s Talking SMS Service',
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Test SMS route (for debugging)
+// Test SMS route with detailed logging
 router.post('/test', async (req, res) => {
     try {
+        console.log('=== Test SMS Request ===');
+        console.log('Request body:', req.body);
+        
+        // Use provided data or defaults
         const testMessage = {
-            to: '+250786980814',
-            message: 'Test message from MdLink SMS Service',
-            from: 'INEZA'
+            to: req.body.to || '+250786980814',
+            message: req.body.message || `Test message from Africa's Talking SMS Service at ${new Date().toISOString()}`,
+            from: req.body.from || 'INEZA'
         };
+        
+        console.log('Test SMS data:', testMessage);
         
         const response = await sms.send({
             to: testMessage.to,
@@ -108,28 +127,67 @@ router.post('/test', async (req, res) => {
             enqueue: true
         });
         
+        console.log('Test SMS Response:', JSON.stringify(response, null, 2));
+        
         res.status(200).json({
             success: true,
             message: 'Test SMS sent successfully',
-            data: response
+            data: response,
+            test_data: testMessage
         });
         
     } catch (error) {
-        console.error('Test SMS Error:', error);
+        console.error('Test SMS Error:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
+        
         res.status(500).json({
             success: false,
             error: error.message,
-            details: error.toString()
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 });
 
+// Health check route
+router.get('/health', (req, res) => {
+    console.log('Health check requested');
+    res.status(200).json({
+        status: 'healthy',
+        service: 'Africa\'s Talking SMS Service',
+        timestamp: new Date().toISOString(),
+        credentials: {
+            apiKey: credentials.apiKey ? 'Set (***' + credentials.apiKey.slice(-10) + ')' : 'Not Set',
+            username: credentials.username || 'Not Set'
+        }
+    });
+});
+
+// Debug route to test credentials
+router.get('/debug', (req, res) => {
+    console.log('Debug info requested');
+    res.status(200).json({
+        service: 'Africa\'s Talking SMS Debug',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
+        credentials: {
+            apiKey: credentials.apiKey ? 'Set (length: ' + credentials.apiKey.length + ')' : 'Not Set',
+            username: credentials.username || 'Not Set',
+            api_key_preview: credentials.apiKey ? credentials.apiKey.substring(0, 10) + '...' : 'Not Set'
+        },
+        available_env: {
+            API_KEY: process.env.API_KEY ? 'Set' : 'Not Set',
+            USERNAME: process.env.USERNAME ? 'Set' : 'Not Set'
+        }
+    });
+});
+
 // Delivery callback route
 router.post('/delivery', async (req, res) => {
-    console.log('Delivery Report:', req.body); 
-    
-    // Here you could save delivery status to database
-    // or forward to your main application
+    console.log('=== Delivery Report ===');
+    console.log('Delivery Report Body:', req.body); 
     
     res.status(200).json({
         status: 'success',
@@ -142,11 +200,14 @@ router.get('/', (req, res) => {
     res.status(200).json({
         service: 'Africa\'s Talking SMS Service',
         version: '1.0.0',
+        status: 'online',
+        timestamp: new Date().toISOString(),
         endpoints: {
             'POST /': 'Send SMS',
             'POST /test': 'Send test SMS',
             'POST /delivery': 'Delivery callback',
             'GET /health': 'Health check',
+            'GET /debug': 'Debug information',
             'GET /': 'Service info'
         },
         usage: {
@@ -163,9 +224,18 @@ router.get('/', (req, res) => {
     });
 });
 
+// Error handling middleware
+router.use((error, req, res, next) => {
+    console.error('Unhandled Error:', error);
+    res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+});
+
 module.exports = router;
-
-
 
 // const express = require('express'); 
 // const router = express.Router(); 
