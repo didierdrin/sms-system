@@ -28,9 +28,9 @@ router.post('/', async (req, res) => {
         console.log('Raw body:', req.body);
         
         // Extract data from request body
-        const { to, message, from } = req.body;
+        const { to, message, from } = req.body;  // Keep 'from' extraction, but ignore it
         
-        console.log(`To: ${to}, From: ${from}, Message: ${message}`);
+        console.log(`To: ${to}, From: ${from}, Message: ${message}`);  // Logging still shows it
         
         // Validate required fields
         if (!to || !message) {
@@ -63,17 +63,12 @@ router.post('/', async (req, res) => {
             });
         }
         
-        // Prepare SMS options
+        // Prepare SMS options (DO NOT ADD 'from' to use default sender)
         const smsOptions = {
             to: to,
             message: message,
             enqueue: true
         };
-        
-        // Add sender ID if provided and valid
-        if (from && typeof from === 'string' && from.trim().length > 0) {
-            smsOptions.from = from;
-        }
         
         console.log('SMS Options:', smsOptions);
         
@@ -236,6 +231,9 @@ router.use((error, req, res, next) => {
 });
 
 module.exports = router;
+
+
+
 
 // const express = require('express'); 
 // const router = express.Router(); 
